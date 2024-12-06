@@ -1,26 +1,27 @@
-const { initializeApp, applicationDefault, cert } = require('firebase-admin/app');
-const { getFirestore, Timestamp, FieldValue, Filter } = require('firebase-admin/firestore');
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, getDocs, getDoc } from "firebase/firestore/lite";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBRrtananBMNRUU43Udn04Y-vQ7mlrJ5vo",
-    authDomain: "algotradingdb.firebaseapp.com",
-    projectId: "algotradingdb",
-    storageBucket: "algotradingdb.appspot.com",
-    messagingSenderId: "680703939506",
-    appId: "1:680703939506:web:8dc2056b53a53bc5d9caab",
-    measurementId: "G-J8ZGEKQEN4"
+  apiKey: "AIzaSyDQxGD5KEPrBkPMJnktoL9bwf9iPKyrEkQ",
+  authDomain: "trading-86050.firebaseapp.com",
+  projectId: "trading-86050",
+  storageBucket: "trading-86050.firebasestorage.app",
+  messagingSenderId: "951816765324",
+  appId: "1:951816765324:web:afe6b7dae5532623cf60a9",
+  measurementId: "G-H7BPFNE6MJ",
+};
+
+const app = initializeApp(firebaseConfig);
+
+export const db = getFirestore(app);
+export const currency = collection(db,"Currency")
+// export const eurusdDoc = getDoc("EURUSD")
+// get
+
+export function dbConnect() {
+  if (db) {
+    console.log("Database connected sucessfully");
+  } else {
+    console.log("Failed connection");
   }
-
-
-
-initializeApp(firebaseConfig);
-
-export const db = getFirestore();
-
-export function dbConnect(){
-    if(db){
-        console.log("Database connected sucessfully")
-    } else{
-        console.log("Failed connection")
-    }
 }
