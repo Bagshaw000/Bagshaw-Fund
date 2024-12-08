@@ -1,6 +1,13 @@
 import { getHistoricalRates } from "dukascopy-node";
 import { db, dbConnect } from "./db";
-import { d1TickData, h1TickData, h4TickData, tickDataInterface } from "./types";
+import {
+  d1TickData,
+  DayData,
+  h1TickData,
+  h4TickData,
+  mnTickData,
+  tickDataInterface,
+} from "./types";
 import {
   collection,
   doc,
@@ -50,38 +57,51 @@ async function storeData(
     const rawData = await getTickData(from, to, timeframe, symbol);
     const tickYear = from.getFullYear().toString();
 
+    const getMonthData: Record<string, mnTickData> = {};
     // Map raw data to a structured format for monthly data
-    const getMonthData: Array<d1TickData> = rawData.map((data) => ({
-      timestamp: new Date(data.timestamp),
-      open: data.open,
-      high: data.high,
-      low: data.low,
-      close: data.close,
-      volume: data.volume || 0,
-      D1: [],
-    }));
+    rawData.forEach((data) => {
+      const dateKey = new Date(data.timestamp).toISOString().split("T")[0]; // Format as YYYY-MM-DD
+      getMonthData[dateKey] = {
+        timestamp: new Date(data.timestamp),
+        open: data.open,
+        high: data.high,
+        low: data.low,
+        close: data.close,
+        volume: data.volume || 0,
+        D1: {}, // Initialize as an empty object for key-value pairs
+      };
+    });
 
     // Map raw data to a structured format for daily data
-    const getDayData: Array<h4TickData> = rawData.map((data) => ({
-      timestamp: new Date(data.timestamp),
-      open: data.open,
-      high: data.high,
-      low: data.low,
-      close: data.close,
-      volume: data.volume || 0,
-      H4: [],
-    }));
+    const getDayData: Record<string, h4TickData> = {};
 
-    const getH4Data: Array<h1TickData> = rawData.map((data) => ({
-      timestamp: new Date(data.timestamp),
-      open: data.open,
-      high: data.high,
-      low: data.low,
-      close: data.close,
-      volume: data.volume || 0,
-      H1: [],
-    }));
+    rawData.forEach((data) => {
+      const dateKey = new Date(data.timestamp).toISOString().split("T")[0]; // Format as YYYY-MM-DD
+      getDayData[dateKey] = {
+        timestamp: new Date(data.timestamp),
+        open: data.open,
+        high: data.high,
+        low: data.low,
+        close: data.close,
+        volume: data.volume || 0,
+        H1: {}, // Initialize as an empty object for key-value pairs
+      };
+    });
 
+    // Map raw data to a structured format for daily data
+    const getH4Data: Record<string, h1TickData> = {};
+    rawData.forEach((data) => {
+      const dateKey = new Date(data.timestamp).toISOString().split("T")[0]; // Format as YYYY-MM-DD
+      getH4Data[dateKey] = {
+        timestamp: new Date(data.timestamp),
+        open: data.open,
+        high: data.high,
+        low: data.low,
+        close: data.close,
+        volume: data.volume || 0,
+        M30: {}, // Initialize as an empty object for key-value pairs
+      };
+    });
     // Log the number of day data returned for debugging
     console.log("The number of day returned:" + getDayData.length);
 
@@ -94,12 +114,12 @@ async function storeData(
         }
       case "d1":
         if (getDayData) {
-          await storeDayData(getDayData, symbol, tickYear);
+          // await storeDayData(getDayData, symbol, tickYear);
           break;
         }
       case "h4":
         if (getH4Data) {
-          await updateH4ForMatchingDays(tickYear, symbol, getDayData); // Update H4 data for matching days in 2023 for GBP/USD
+          // await updateH4Array(tickYear, symbol, getH4Data); // Update H4 data for matching days in 2023 for GBP/USD
         }
     }
   } catch (error) {
@@ -109,77 +129,80 @@ async function storeData(
 
 // Function to store monthly tick data into Firestore
 async function storeMonthData(
-  data: d1TickData[],
+  data: Record<string, mnTickData>,
   symbol: "eurusd" | "gbpusd",
   tickYear: string
 ) {
   try {
-    switch (symbol) {
-      case "eurusd":
-        const euMonthTickData = {
-          Month: data,
-        };
+    // Create a mapping of month indices to month names
+    const monthNames = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
 
-        // Define the document reference for EUR/USD
-        const euDocRef = doc(db, `Currency/EURUSD/${tickYear}/TickData`);
+    // Convert the data into a key-value pair structure
+    const monthDataMap: Record<string, Record<string, mnTickData>> = {}; // Month -> Day -> Data
 
-        // Write the data to Firestore
-        await setDoc(euDocRef, euMonthTickData).then(() => {
-          return { msg: "Success", timeframe: "Month" };
-        });
-        break;
+    // Iterate over the keys of the data object
+    for (const key in data) {
+      if (data.hasOwnProperty(key)) {
+        const monthData = data[key]; // Get the d1TickData object
 
-      case "gbpusd":
-        const guMonthTickData = {
-          Month: data,
-        };
+        const monthIndex = new Date(monthData.timestamp).getMonth(); // Get the month index
+        const monthName = monthNames[monthIndex]; // Get the month name
 
-        // Define the document reference for GBP/USD
-        const guDocRef = doc(db, `Currency/GBPUSD/${tickYear}/TickData`);
-
-        // Write the data to Firestore
-        await setDoc(guDocRef, guMonthTickData).then(() => {
-          return { msg: "Success", timeframe: "Month" };
-        });
-        break;
+        // Initialize the month entry if not present
+        if (!monthDataMap[monthName]) {
+          monthDataMap[monthName] = {};
+        }
+        const dayKey = monthData.timestamp.toISOString().split("T")[0]; // Format as YYYY-MM-DD
+        monthDataMap[monthName][dayKey] = monthData; // Store the month data
+      }
     }
+
+    // Define the document reference based on the symbol
+    const docRef = doc(db, `Currency/${symbol.toUpperCase()}/${tickYear}/Tick`);
+
+    // Write the data to Firestore
+    await setDoc(docRef, { Month: monthDataMap }).then(() => {
+      return { msg: "Success", timeframe: "Month" };
+    });
   } catch (error) {
-    throw error;
+    console.error("Error storing month data:", error); // Log the error
+    throw new Error("Failed to store month data."); // Throw a more informative error
   }
 }
 
-// Function to store daily tick data into Firestore
-async function storeDayData(
-  data: h4TickData[],
-  symbol: "eurusd" | "gbpusd",
-  tickYear: string
-) {
-  try {
-    // Initialize an array to hold monthly data
-    let monthData: Array<Array<h4TickData>> = Array.from(
-      { length: 12 },
-      () => []
-    );
+// Define the structure for day data
 
-    // Log the length of the daily data for debugging
-    console.log(data.length);
+// // Function to store day data as key-value pairs
+// function storeDayDataAsObject(
+//   monthData: d1TickData[]
+// ): Record<string, DayData> {
+//   const dayDataMap: Record<string, DayData> = {};
 
-    // Iterate over each tick in the daily data
-    data.forEach(async (tick) => {
-      const tickMonth = tick.timestamp.getMonth();
+//   monthData.forEach((month) => {
+//     month.D1.forEach((h4Data) => {
+//       const dateKey = new Date(h4Data.timestamp).toISOString().split("T")[0]; // Format as YYYY-MM-DD
+//       if (!dayDataMap[dateKey]) {
+//         dayDataMap[dateKey] = { D1: [] }; // Initialize if not already present
+//       }
+//       dayDataMap[dateKey].D1.push(h4Data); // Add H4 data to the corresponding day
+//     });
+//   });
 
-      // Push the tick data into the corresponding month array
-      monthData.at(tickMonth)!.push(tick);
-    });
-
-    // Update the D1 array for each month with the corresponding tick data
-    monthData.map((tick) => {
-      updateD1Array(tickYear, monthData.indexOf(tick), tick, symbol);
-    });
-  } catch (error) {
-    console.error("Error storing daily data: ", error);
-  }
-}
+//   return dayDataMap; // Return the key-value pair object
+// }
 
 async function storeH4Data(
   data: h1TickData[],
@@ -237,61 +260,74 @@ async function updateD1Array(
     console.error("Error updating document: ", error);
   }
 }
+// async function updateH4Array(
+//   tickYear: string,
+//   symbol: "eurusd" | "gbpusd",
+//   newH4Data: h1TickData[]
+// ) {
+//   try {
+//     let currency = symbol.toUpperCase(); // Convert symbol to uppercase
+//     const docRef = doc(db, `Currency/${currency}/${tickYear}/TickData`); // Document reference
 
-async function updateH4ForMatchingDays(
-  tickYear: string,
-  symbol: "eurusd" | "gbpusd",
-  newH4Data: h4TickData[]
-) {
-  try {
-    let currency = symbol.toUpperCase().toString(); // Convert symbol to uppercase
-    const docRef = doc(db, `Currency/${currency}/${tickYear}/TickData`); // Document reference
+//     // Step 1: Get the current document
+//     const docSnapshot = await getDoc(docRef);
+//     if (!docSnapshot.exists()) {
+//       console.error("Document does not exist!"); // Log error if document does not exist
+//       return;
+//     }
 
-    // Step 1: Get the current document
-    const docSnapshot = await getDoc(docRef);
-    if (!docSnapshot.exists()) {
-      console.error("Document does not exist!"); // Log error if document does not exist
-      return;
-    }
+//     // Step 2: Get the current Month array
+//     const monthData = docSnapshot.data().Month;
 
-    // Step 2: Get the current Month array
-    const monthData = docSnapshot.data().Month;
+//     // Create a map to store new H4 data by day and month for quick access
+//     const newH4Map: Record<string, h1TickData[]> = {};
+//     newH4Data.forEach((newH4TickData) => {
+//       const dateKey = `${new Date(newH4TickData.timestamp).getFullYear()}-${
+//         new Date(newH4TickData.timestamp).getMonth() + 1
+//       }-${new Date(newH4TickData.timestamp).getDate()}`;
+//       if (!newH4Map[dateKey]) {
+//         newH4Map[dateKey] = [];
+//       }
+//       newH4Map[dateKey].push(newH4TickData); // Group new H4 data by date
+//     });
+//     console.log(newH4Map);
 
-    // Step 3: Iterate through each month
-    monthData.forEach((month: { D1: d1TickData[]; H4: h4TickData[] }) => {
-      // Step 4: Iterate through each day in the D1 array
-      month.D1.forEach((dayData: d1TickData) => {
-        // Step 5: Check if there is matching H4 data for the day
-        const matchingH4Data: h4TickData | undefined = newH4Data.find(
-          (h4) => h4.timestamp.getTime() === dayData.timestamp.getTime() // Compare timestamps
-        );
+//     // Loop through the Month data
+//     monthData.forEach((d1TickData: d1TickData) => {
+//       // Loop through the Day data
+//       d1TickData.D1.forEach((h4TickData: h4TickData) => {
+//         const h4DateKey = `${new Date(h4TickData.timestamp).getFullYear()}-${
+//           new Date(h4TickData.timestamp).getMonth() + 1
+//         }-${new Date(h4TickData.timestamp).getDate()}`;
 
-        // Step 6: If matching H4 data is found, update the H4 array for that day
-        if (matchingH4Data) {
-          // Find the index of the existing H4 data for that day
-          const dayIndex: number = month.H4.findIndex(
-            (h4) => h4.timestamp.getTime() === dayData.timestamp.getTime( )
-          );
+//         // Check if there are new H4 data for the corresponding day
+//         if (newH4Map[h4DateKey]) {
+//           newH4Map[h4DateKey].forEach((newH4TickData) => {
+//             // Check for duplicates before pushing
+//             const exists = h4TickData.H4.some(
+//               (existingH4) =>
+//                 existingH4.timestamp.getTime() ===
+//                 newH4TickData.timestamp.getTime()
+//             );
 
-          if (dayIndex !== -1) {
-            // Update existing H4 data
-            month.H4[dayIndex] = matchingH4Data; // Replace with new H4 data
-          } else {
-            // If no existing H4 data, you can push it to the H4 array
-            month.H4.push(matchingH4Data); // Add new H4 data
-          }
-        }
-      });
-    });
-
-    console.log(monthData[0].D1[0]);
-    // Step 7: Write back the updated Month array
-    // await updateDoc(docRef, { Month: monthData }); // Update the document in Firestore
-    console.log("H4 arrays updated successfully for matching days!"); // Log success message
-  } catch (error) {
-    console.error("Error updating H4 arrays: ", error); // Log error if updating fails
-  }
-}
+//             if (!exists) {
+//               h4TickData.H4.push(newH4TickData); // Add new H4 data to the existing H4 array
+//               console.log(`Added new H4 data for ${h4DateKey}:`, newH4TickData);
+//             } else {
+//               console.log(
+//                 `Duplicate H4 data for ${h4DateKey} not added:`,
+//                 newH4TickData
+//               );
+//             }
+//           });
+//           // console.log(`Updated H4 array for ${h4DateKey}:`, h4TickData.H4);
+//         }
+//       });
+//     });
+//   } catch (error) {
+//     console.error("Error updating H4 arrays: ", error); // Log error if updating fails
+//   }
+// }
 
 // Example usage
 const newH4Data = [
@@ -306,5 +342,5 @@ const newH4Data = [
 ];
 
 // Example usage of storeData function
-storeData(new Date("2010-01-01"), new Date("2010-12-31"), "h4", "gbpusd");
+storeData(new Date("2010-01-01"), new Date("2010-12-31"), "mn1", "gbpusd");
 //Calculate the weekly timeframe
