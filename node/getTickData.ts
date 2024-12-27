@@ -68,7 +68,6 @@ async function storeData(
         low: data.low,
         close: data.close,
         volume: data.volume || 0,
-        D1: {}, // Initialize as an empty object for key-value pairs
       };
     });
 
@@ -76,32 +75,44 @@ async function storeData(
     const getDayData: Record<string, d1TickData> = {};
 
     rawData.forEach((data) => {
-      const dateKey = new Date(data.timestamp).toISOString().split("T")[0]; // Format as YYYY-MM-DD
+      const dateKey = new Date(data.timestamp).toISOString(); // Format as YYYY-MM-DD
       getDayData[dateKey] = {
-        timestamp: new Date(data.timestamp),
         open: data.open,
         high: data.high,
         low: data.low,
         close: data.close,
         volume: data.volume || 0,
-        H4: {}, // Initialize as an empty object for key-value pairs
+        parentTimestamp: new Date(data.timestamp).toISOString(),
       };
     });
 
     // Map raw data to a structured format for daily data
-    const getH4Data: Record<string, h1TickData> = {};
+    const getH4Data: Record<string, h4TickData> = {};
     rawData.forEach((data) => {
-      const dateKey = new Date(data.timestamp).toISOString().split("T")[0]; // Format as YYYY-MM-DD
+      const dateKey = new Date(data.timestamp).toISOString(); // Format as YYYY-MM-DD
       getH4Data[dateKey] = {
-        timestamp: new Date(data.timestamp),
         open: data.open,
         high: data.high,
         low: data.low,
         close: data.close,
         volume: data.volume || 0,
-        M30: {}, // Initialize as an empty object for key-value pairs
+        parentTimestamp: new Date(data.timestamp).toISOString(),
       };
     });
+
+    const getH1Data: Record<string, h1TickData> = {};
+    rawData.forEach((data) => {
+      const dateKey = new Date(data.timestamp).toISOString(); // Format as YYYY-MM-DD
+      getH4Data[dateKey] = {
+        open: data.open,
+        high: data.high,
+        low: data.low,
+        close: data.close,
+        volume: data.volume || 0,
+        parentTimestamp: new Date(data.timestamp).toISOString(),
+      };
+    });
+
     // Log the number of day data returned for debugging
     console.log("The number of day returned:" + getDayData.length);
 
@@ -109,17 +120,25 @@ async function storeData(
     switch (timeframe) {
       case "mn1":
         if (getMonthData) {
-          await storeMonthData(getMonthData, symbol, tickYear);
+          // await storeMonthData(getMonthData, symbol, tickYear);
+          await monthData(tickYear, getMonthData, symbol);
           break;
         }
       case "d1":
         if (getDayData) {
-          await updateD1Array(tickYear, getDayData, symbol);
+          // await updateD1Array(tickYear, getDayData, symbol);
+          await dayData(tickYear, getDayData, symbol);
           break;
         }
       case "h4":
         if (getH4Data) {
-          // await updateH4Array(tickYear, symbol, getH4Data); // Update H4 data for matching days in 2023 for GBP/USD
+          await h4Data(tickYear, getDayData, symbol);
+          break;
+        }
+      case "h1":
+        if(getH1Data){
+          await h1Data(tickYear, getDayData, symbol);
+          break
         }
     }
   } catch (error) {
@@ -128,146 +147,77 @@ async function storeData(
 }
 
 // Function to store monthly tick data into Firestore
-async function storeMonthData(
-  data: Record<string, mnTickData>,
-  symbol: "eurusd" | "gbpusd",
-  tickYear: string
+
+
+
+
+// Example usage of storeData function
+storeData(new Date("2010-01-01"), new Date("2010-12-31"), "h1", "gbpusd");
+//Calculate the weekly timeframe
+
+async function monthData(
+  tickYear: string,
+  newData: Record<string, mnTickData>,
+  symbol: "eurusd" | "gbpusd"
 ) {
   try {
-    // Create a mapping of month indices to month names
-    const monthNames = [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ];
+    let currency = symbol.toUpperCase();
+    const docRef = doc(db, `Forex/${currency}/${tickYear}/MN`);
+    await setDoc(docRef, newData);
 
-    // Convert the data into a key-value pair structure
-    const monthDataMap: Record<string, Record<string, mnTickData>> = {}; // Month -> Day -> Data
-
-    // Iterate over the keys of the data object
-    for (const key in data) {
-      if (data.hasOwnProperty(key)) {
-        const monthData = data[key]; // Get the d1TickData object
-
-        const monthIndex = new Date(monthData.timestamp!).getMonth(); // Get the month index
-        const monthName = monthNames[monthIndex]; // Get the month name
-
-        // Initialize the month entry if not present
-        if (!monthDataMap[monthName]) {
-          monthDataMap[monthName] = {};
-        }
-        const dayKey = monthData.timestamp!.toISOString().split("T")[0]; // Format as YYYY-MM-DD
-        monthDataMap[monthName][dayKey] = monthData; // Store the month data
-      }
-    }
-
-    // Define the document reference based on the symbol
-    const docRef = doc(db, `Currency/${symbol.toUpperCase()}/${tickYear}/Tick`);
-
-    // Write the data to Firestore
-    await setDoc(docRef, { Month: monthDataMap }).then(() => {
-      return { msg: "Success", timeframe: "Month" };
-    });
+    console.log("MN array updated successfully!");
   } catch (error) {
-    console.error("Error storing month data:", error); // Log the error
-    throw new Error("Failed to store month data."); // Throw a more informative error
+    console.error("Error updating document: ", error);
   }
 }
 
-async function storeH4Data(
-  data: h1TickData[],
-  symbol: "eurusd" | "gbpusd",
-  tickYear: string
+async function dayData(
+  tickYear: string,
+  newData: Record<string, d1TickData>,
+  symbol: "eurusd" | "gbpusd"
 ) {
   try {
-    data.map(async (tick) => {
-      const tickMonth = tick.timestamp!.getMonth();
-      const tickDay = tick.timestamp!.getDay();
-    });
+    console.log(newData);
+
+    let currency = symbol.toUpperCase();
+    const docRef = doc(db, `Forex/${currency}/${tickYear}/D1`);
+    await setDoc(docRef, newData);
+
+    console.log("Daily array updated successfully!");
   } catch (error) {
-    console.error("Error storing H4 data: ", error);
+    console.error("Error updating document: ", error);
   }
 }
 
-// Function to update the D1 array for a specific month in Firestore
-async function updateD1Array(
+async function h4Data(
   tickYear: string,
   newData: Record<string, d1TickData>,
   symbol: "eurusd" | "gbpusd"
 ) {
   try {
     let currency = symbol.toUpperCase();
+    const docRef = doc(db, `Forex/${currency}/${tickYear}/H4`);
+    await setDoc(docRef, newData);
 
-    // Define the document reference for the tick data
-    const docRef = doc(db, `Currency/${currency}/${tickYear}/Tick`);
-
-    //Get the current document
-    const docSnapshot = await getDoc(docRef);
-    if (!docSnapshot.exists()) {
-      console.error("Document does not exist!");
-      return;
-    }
-
-    // Get the current Month record
-    const monthData: Record<
-      string,
-      Record<string, mnTickData>
-    > = docSnapshot.data().Month;
-
-    // Loop through the month data
-    Object.entries(monthData).forEach(([month, dates]) => {
-      //Loop through the entry in the Month data to get the key timestamp
-      Object.entries(dates).forEach(([dateKey, dateValue]) => {
-        //Get the month index for each month in the database
-        const monthIndex = new Date(dateKey).getMonth();
-        Object.entries(newData).forEach(([date, data]) => {
-          const dayMonthIndex = new Date(date).getMonth();
-
-          //Check if the months are the same from the database data and the api data
-          if (monthIndex === dayMonthIndex) {
-            const dayKey = new Date(date).toISOString();
-
-            //Check if the D1 object is set if not set then set it to an object
-            if (!monthData[month][dateKey].D1) {
-              monthData[month][dateKey].D1 = {};
-            }
-
-            //Check if the D1 has that particular day in the record. If not present then add the day data
-            if (!monthData[month][dateKey].D1.hasOwnProperty(dayKey)) {
-              monthData[month][dateKey].D1[dayKey] = {
-                timestamp: data?.timestamp,
-                open: data?.open,
-                high: data?.high,
-                low: data?.low,
-                close: data?.close,
-                volume: data!.volume,
-                H4: {},
-              };
-            }
-          }
-        });
-      });
-    });
-
-    //Write back the updated Month array
-    await updateDoc(docRef, { Month: monthData });
-    console.log("D1 array updated successfully!");
+    console.log("Daily array updated successfully!");
   } catch (error) {
     console.error("Error updating document: ", error);
   }
 }
-// Example usage
 
 
-// Example usage of storeData function
-storeData(new Date("2010-01-01"), new Date("2010-12-31"), "d1", "gbpusd");
-//Calculate the weekly timeframe
+async function h1Data(
+  tickYear: string,
+  newData: Record<string, d1TickData>,
+  symbol: "eurusd" | "gbpusd"
+) {
+  try {
+    let currency = symbol.toUpperCase();
+    const docRef = doc(db, `Forex/${currency}/${tickYear}/H1`);
+    await setDoc(docRef, newData);
+
+    console.log("Daily array updated successfully!");
+  } catch (error) {
+    console.error("Error updating document: ", error);
+  }
+}

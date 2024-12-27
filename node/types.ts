@@ -5,6 +5,7 @@ export interface tickDataInterface {
   low?: number;
   close?: number;
   volume?: number;
+  parentTimestamp?: string;
   MN: Record<string, mnTickData>;
   D1: Record<string, d1TickData>;
   H4: Record<string, h4TickData>;
@@ -21,40 +22,40 @@ export interface DayData {
 
 export type mnTickData = Omit<
   tickDataInterface,
-  "MN" | "H4" | "H1" | "M30" | "M15" | "M5" | "M1"
+  "MN" | "H4" | "H1" | "M30" | "M15" | "M5" | "M1" | "D1"
 >;
 //Use the omit utlity type to segment them
 export type d1TickData = Omit<
   tickDataInterface,
-  "MN" | "D1" | "H1" | "M30" | "M15" | "M5" | "M1"
+  "MN" | "D1" | "H1" | "M30" | "M15" | "M5" | "M1" | "H4" | "timestamp"
 >;
 
 export type h4TickData = Omit<
   tickDataInterface,
-  "MN" | "D1" | "H4" | "H4" | "M30" | "M15" | "M5" | "M1"
+  "MN" | "D1" | "H1" | "H4" | "M30" | "M15" | "M5" | "M1" | "timestamp"
 >;
 
 export type h1TickData = Omit<
   tickDataInterface,
-  "MN" | "D1" | "H4" | "H1" | "M15" | "M5" | "M1"
+  "MN" | "D1" | "H4" | "H1" | "M30" | "M15" | "M5" | "M1" | "timestamp"
 >;
 
 export type m30TickData = Omit<
   tickDataInterface,
-  "MN" | "D1" | "H1" | "H4" | "M30" | "M5" | "M1"
+  "MN" | "D1" | "H1" | "H4" | "M30" | "M15" | "M5" | "M1" | "timestamp"
 >;
 
 export type m15TickData = Omit<
   tickDataInterface,
-  "MN" | "D1" | "H1" | "M30" | "H4" | "M15" | "M1"
+  "MN" | "D1" | "H1" | "M30" | "H4" | "M15" | "M5" | "M1" | "timestamp"
 >;
 
 export type m5TickData = Omit<
   tickDataInterface,
-  "MN" | "D1" | "H1" | "M30" | "M15" | "H4" | "M5"
+  "MN" | "D1" | "H1" | "M30" | "M15" | "H4" | "M5" | "M1" | "timestamp"
 >;
 
 export type m1TickData = Omit<
   tickDataInterface,
-  "MN" | "D1" | "H1" | "M30" | "M15" | "M5" | "H4" | "M1"
+  "MN" | "D1" | "H1" | "M30" | "M15" | "M5" | "H4" | "M1" | "timestamp"
 >;
